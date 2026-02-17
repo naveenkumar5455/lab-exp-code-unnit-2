@@ -1,0 +1,115 @@
+import numpy as np
+import random
+
+# ---------------- ENVIRONMENT ----------------
+class RoboticArmEnv:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.arm_pos = 0
+        self.object_pos = 1
+        self.holding = False
+        return self.state()
+
+    def state(self):
+        return np.array([self.arm_pos, self.object_pos, int(self.holding)])
+
+    def step(self, action):
+        reward = -0.1
+
+        if action == 0:   # move left
+            self.arm_pos = max(0, self.arm_pos - 1)
+        elif action == 1: # move right
+            self.arm_pos = min(2, self.arm_pos + 1)
+        elif action == 2 and self.arm_pos == self.object_pos:
+            self.holding = True
+        elif action == 3 and self.holding:
+            reward = 10
+            done = True
+            return self.state(), reward, done
+
+        done = False
+        return self.state(), reward, done
+
+# ---------------- DQN MODEL ----------------
+class DQN:
+    def __init__(self, state_size, action_size):
+        self.weights = np.random.randn(state_size, action_size)
+
+    def predict(self, state):
+        return np.dot(state, self.weights)
+
+    def update(self, state, target, lr=0.01):
+        prediction = self.predict(state)
+        self.weights += lr * np.outer(state, (target - prediction))
+
+# ---------------- PRIORITIZED REPLAY BUFFER ----------------
+class PrioritizedReplay:
+    def __init__(self, capacity=1000):
+        self.buffer = []
+        self.priorities = []
+        self.capacity = capacity
+
+    def add(self, experience, priority):
+        if len(self.buffer) >= self.capacity:
+            self.buffer.pop(0)
+            self.priorities.pop(0)
+        self.buffer.append(experience)
+        self.priorities.append(priority)
+
+    def sample(self, batch_size):
+        probs = np.array(self.priorities) / sum(self.priorities)
+        indices = np.random.choice(len(self.buffer), batch_size, p=probs)
+        return [self.buffer[i] for i in indices], indices
+
+    def update_priorities(self, indices, priorities):
+        for i, p in zip(indices, priorities):
+            self.priorities[i] = p
+
+# ---------------- TRAINING ----------------
+env = RoboticArmEnv()
+state_size = 3
+action_size = 4
+
+dqn = DQN(state_size, action_size)
+memory = PrioritizedReplay()
+
+gamma = 0.9
+episodes = 500
+epsilon = 0.3
+
+for ep in range(episodes):
+    state = env.reset()
+    done = False
+
+    while not done:
+        if random.random() < epsilon:
+            action = random.randint(0, action_size - 1)
+        else:
+            action = np.argmax(dqn.predict(state))
+
+        next_state, reward, done = env.step(action)
+
+        q_next = np.max(dqn.predict(next_state))
+        target = reward + gamma * q_next
+
+        td_error = abs(target - dqn.predict(state)[action])
+        memory.add((state, action, reward, next_state), td_error + 1e-5)
+
+        state = next_state
+
+    if len(memory.buffer) > 10:
+        batch, idxs = memory.sample(5)
+        new_priorities = []
+
+        for s, a, r, ns in batch:
+            q_target = r + gamma * np.max(dqn.predict(ns))
+            q_values = dqn.predict(s)
+            q_values[a] = q_target
+            dqn.update(s, q_values)
+            new_priorities.append(abs(q_target - q_values[a]) + 1e-5)
+
+        memory.update_priorities(idxs, new_priorities)
+
+print("Training completed using DQN with Prioritized Experience Replay")
