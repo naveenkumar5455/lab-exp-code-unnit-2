@@ -1,0 +1,72 @@
+import numpy as np
+import random
+
+# Maze:
+# 0 = free, -1 = trap, +1 = goal
+maze = np.array([
+    [0,  0,  0,  1],
+    [0, -1,  0,  0],
+    [0,  0, -1,  0],
+    [0,  0,  0,  0]
+])
+
+rows, cols = maze.shape
+start = (3, 0)
+goal = (0, 3)
+
+# Parameters
+alpha = 0.1
+gamma = 0.9
+episodes = 1000
+max_steps = 50   # 🔑 prevents infinite loop
+
+# State-value function
+V = np.zeros((rows, cols))
+
+# Actions: up, down, left, right
+actions = [(-1,0), (1,0), (0,-1), (0,1)]
+
+def get_next_state(state, action):
+    r, c = state
+    nr, nc = r + action[0], c + action[1]
+    if 0 <= nr < rows and 0 <= nc < cols:
+        return (nr, nc)
+    return state
+
+# ---------------- TD(0) LEARNING ----------------
+for ep in range(episodes):
+    state = start
+
+    for step in range(max_steps):
+        if state == goal or maze[state] == -1:
+            break
+
+        action = random.choice(actions)
+        next_state = get_next_state(state, action)
+
+        reward = maze[next_state]
+        V[state] += alpha * (reward + gamma * V[next_state] - V[state])
+
+        state = next_state
+
+# ---------------- EXTRACT OPTIMAL PATH ----------------
+state = start
+path = [state]
+
+for _ in range(max_steps):
+    if state == goal:
+        break
+
+    next_states = [get_next_state(state, a) for a in actions]
+    values = [V[s] for s in next_states]
+
+    best_state = next_states[np.argmax(values)]
+    state = best_state
+    path.append(state)
+
+# ---------------- OUTPUT ----------------
+print("Learned State Value Function:")
+print(np.round(V, 2))
+
+print("\nOptimal Path from Start to Goal:")
+print(path)
