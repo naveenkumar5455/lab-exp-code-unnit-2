@@ -1,0 +1,84 @@
+import numpy as np
+
+# Prices and true purchase probabilities
+prices = np.array([100, 120, 140, 160])
+true_probs = np.array([0.30, 0.25, 0.18, 0.10])
+n_arms = len(prices)
+rounds = 10000
+
+def simulate_purchase(arm):
+    return np.random.rand() < true_probs[arm]
+
+# ---------------- Epsilon-Greedy ----------------
+def epsilon_greedy(epsilon=0.1):
+    counts = np.zeros(n_arms)
+    rewards = np.zeros(n_arms)
+    total_revenue = 0
+
+    for _ in range(rounds):
+        if np.random.rand() < epsilon:
+            arm = np.random.randint(n_arms)
+        else:
+            arm = np.argmax(rewards / (counts + 1e-5))
+
+        if simulate_purchase(arm):
+            r = prices[arm]
+        else:
+            r = 0
+
+        counts[arm] += 1
+        rewards[arm] += r
+        total_revenue += r
+
+    return total_revenue
+
+# ---------------- UCB ----------------
+def ucb():
+    counts = np.zeros(n_arms)
+    rewards = np.zeros(n_arms)
+    total_revenue = 0
+
+    for t in range(1, rounds + 1):
+        if 0 in counts:
+            arm = np.argmin(counts)
+        else:
+            ucb_values = rewards / counts + np.sqrt(2 * np.log(t) / counts)
+            arm = np.argmax(ucb_values)
+
+        if simulate_purchase(arm):
+            r = prices[arm]
+        else:
+            r = 0
+
+        counts[arm] += 1
+        rewards[arm] += r
+        total_revenue += r
+
+    return total_revenue
+
+# ---------------- Thompson Sampling ----------------
+def thompson_sampling():
+    alpha = np.ones(n_arms)
+    beta = np.ones(n_arms)
+    total_revenue = 0
+
+    for _ in range(rounds):
+        sampled_probs = np.random.beta(alpha, beta)
+        arm = np.argmax(sampled_probs * prices)
+
+        if simulate_purchase(arm):
+            alpha[arm] += 1
+            r = prices[arm]
+        else:
+            beta[arm] += 1
+            r = 0
+
+        total_revenue += r
+
+    return total_revenue
+
+# Run all strategies
+print("Total Revenue Comparison")
+print("Epsilon-Greedy:", epsilon_greedy())
+print("UCB:", ucb())
+print("Thompson Sampling:", thompson_sampling())
